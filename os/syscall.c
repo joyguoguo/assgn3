@@ -70,20 +70,22 @@ int64 sys_exit(int code) {
 
 int64 sys_wait(int pid, uint64 __user va) {
     struct proc *p = curr_proc();
-    int *code      = NULL;
+    int status      = 0;
+    int *code       = va != 0 ? &status : NULL;
+
+    int64 ret = wait(pid, code);
+    if (ret < 0 || va == 0)
+        return ret;
 
     acquire(&p->lock);
     acquire(&p->mm->lock);
     release(&p->lock);
-
-    if (va != 0) {
-        uint64 pa = useraddr(p->mm, va);
-        code      = (int *)PA_TO_KVA(pa);
-    }
-
+    int copyret = copy_to_user(p->mm, va, (char *)&status, sizeof(status));
     release(&p->mm->lock);
 
-    return wait(pid, code);
+    if (copyret < 0)
+        return copyret;
+    return ret;
 }
 
 int64 sys_getpid() {
